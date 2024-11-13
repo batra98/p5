@@ -54,6 +54,11 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   return &pgtab[PTX(va)];
 }
 
+
+pte_t *get_pte(pde_t *pgdir, char *va) {
+  return walkpgdir(pgdir, va, 0);
+}
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
@@ -195,7 +200,7 @@ inituvm(pde_t *pgdir, char *init, uint sz)
 // Load a program segment into pgdir.  addr must be page-aligned
 // and the pages from addr to addr+sz must already be mapped.
 int
-loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
+loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz, int flags)
 {
   uint i, pa, n;
   pte_t *pte;
@@ -212,6 +217,12 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
       n = PGSIZE;
     if(readi(ip, P2V(pa), offset+i, n) != n)
       return -1;
+
+    if(flags & ELF_PROG_FLAG_WRITE) {
+      *pte = pa | PTE_P | PTE_U | PTE_W;
+    } else {
+      *pte = pa | PTE_P | PTE_U;
+    }
   }
   return 0;
 }

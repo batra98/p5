@@ -532,3 +532,18 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+
+uint va2pa(uint va) 
+{
+  struct proc *currproc = myproc();
+
+  pde_t *pgdir = currproc->pgdir;
+  pde_t *pte = get_pte(pgdir, (void*)va);
+
+  if(!pte || !(*pte & PTE_P))
+    return -1;
+
+  uint pa = PTE_ADDR(*pte) | (va & 0xFFF); 
+  return pa;
+}

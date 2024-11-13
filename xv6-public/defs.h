@@ -10,6 +10,9 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+// TODO: is this the correct way to do this?
+typedef uint pte_t;
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -179,12 +182,13 @@ int             allocuvm(pde_t*, uint, uint);
 int             deallocuvm(pde_t*, uint, uint);
 void            freevm(pde_t*);
 void            inituvm(pde_t*, char*, uint);
-int             loaduvm(pde_t*, char*, struct inode*, uint, uint);
+int             loaduvm(pde_t*, char*, struct inode*, uint, uint, int);
 pde_t*          copyuvm(pde_t*, uint);
 void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pte_t*          get_pte(pde_t *pgdir, char *va); 
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

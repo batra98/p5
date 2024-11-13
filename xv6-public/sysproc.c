@@ -89,3 +89,14 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_va2pa(void) 
+{
+  uint va;
+
+  if(argint(0, (int*)&va) < 0)
+    return -1;
+
+  return (int)va2pa(va);
+}
