@@ -1,5 +1,3 @@
-#ifndef WMAP_H
-#define WMAP_H
 // Flags for wmap
 #define MAP_SHARED 0x0002
 #define MAP_ANONYMOUS 0x0004
@@ -17,4 +15,3 @@ struct wmapinfo {
     int length[MAX_WMMAP_INFO];         // Size of mapping
     int n_loaded_pages[MAX_WMMAP_INFO]; // Number of pages physically loaded into memory
 };
-#endif
