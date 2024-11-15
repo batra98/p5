@@ -14,7 +14,19 @@ int main() {
     // Access the mapped memory to trigger the page fault and perform lazy allocation
     char *mapped_mem = (char *) addr;
     mapped_mem[0] = 'A';  // Writing to the mapped region to trigger a page fault
+    
 
+    struct wmapinfo info;
+    if (getwmapinfo(&info) == 0) {
+        printf(1, "Total mmaps: %d\n", info.total_mmaps);
+        for (int i = 0; i < info.total_mmaps; i++) {
+            printf(1, "Region %d: addr = 0x%x, length = %d, loaded pages = %d\n",
+                   i, info.addr[i], info.length[i], info.n_loaded_pages[i]);
+        }
+    } else {
+        printf(1, "Failed to get wmapinfo.\n");
+    }
+    
     // Verify that the memory access works and the lazy allocation was successful
     if (mapped_mem[0] == 'A') {
         printf(1, "Lazy allocation successful. Memory is accessible.\n");
@@ -27,6 +39,17 @@ int main() {
         exit();
     }
     printf(1, "Memory unmapped successfully\n");
+    
+    if (getwmapinfo(&info) == 0) {
+        printf(1, "Total mmaps: %d\n", info.total_mmaps);
+        for (int i = 0; i < info.total_mmaps; i++) {
+            printf(1, "Region %d: addr = 0x%x, length = %d, loaded pages = %d\n",
+                   i, info.addr[i], info.length[i], info.n_loaded_pages[i]);
+        }
+    } else {
+        printf(1, "Failed to get wmapinfo.\n");
+    }
+
 
     exit();
 }

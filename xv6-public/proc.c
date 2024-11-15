@@ -601,24 +601,46 @@ uint wunmap(uint addr) {
 
 
 
-uint getwmapinfo() {
-    struct proc *p = myproc();
-    struct wmapinfo *info;
+uint getwmapinfo(struct wmapinfo *wminfo) {
+    
+    struct proc *curproc = myproc();
+    int i;
 
-    if (argptr(0, (char**)&info, sizeof(struct wmapinfo)) < 0)
-        return FAILED;
+    wminfo->total_mmaps = curproc->mmap_count;
 
-    info->total_mmaps = 0;
+    for (i = 0; i < curproc->mmap_count && i < MAX_WMMAP_INFO; i++) {
+        wminfo->addr[i] = curproc->mmap_regions[i].addr;
+        wminfo->length[i] = curproc->mmap_regions[i].length;
 
-    struct mmap_region *region = p->mmap_regions;
-    while (region != 0 && info->total_mmaps < MAX_WMMAP_INFO) {
-        info->addr[info->total_mmaps] = region->addr;
-        info->length[info->total_mmaps] = region->length;
-        info->n_loaded_pages[info->total_mmaps] = 0;
-        info->total_mmaps++;
+        int pages_loaded = 0;
+        uint va;
+        for (va = wminfo->addr[i]; va < wminfo->addr[i] + wminfo->length[i]; va += PGSIZE) {
+            pte_t *pte = get_pte(curproc->pgdir, (void*)va);
+            if (pte && (*pte & PTE_P)) {
+                pages_loaded++;
+            }
+        }
+        wminfo->n_loaded_pages[i] = pages_loaded;
     }
 
     return SUCCESS;
+
 }
 
 
+uint va2pa(uint va) 
+{
+  struct proc *currproc = myproc();
+
+  cprintf("%d\n", va);
+
+  pde_t *pgdir = currproc->pgdir;
+
+  pde_t *pte = get_pte(pgdir, (void*)va);
+
+  if(!pte || !(*pte & PTE_P))
+    return FAILED;
+
+  uint pa = PTE_ADDR(*pte) | (va & 0xFFF); 
+  return pa;
+}
