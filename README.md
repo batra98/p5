@@ -7,6 +7,7 @@ layout: default
 Update
 </mark>
 
+* Nov 15: xv6.py updated
 * Nov 14: test 18 updated, test.py updated
 * Nov 13: test 21 updated
 
