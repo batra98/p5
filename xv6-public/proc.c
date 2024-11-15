@@ -90,6 +90,8 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
+  p->mmap_count = 0;
+
   release(&ptable.lock);
 
   // Allocate kernel stack.
@@ -112,7 +114,6 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-  p->mmap_count = 0;
 
   return p;
 }
@@ -542,12 +543,11 @@ uint wmap(uint addr, int length, int flags, int fd) {
     struct proc *p = myproc();
     uint start_addr = addr;
 
-    if (length <= 0 || (flags & MAP_FIXED && addr % PGSIZE != 0)) {
+    if (length <= 0 || (flags & MAP_FIXED && addr % PGSIZE != 0) || ((addr < 0x60000000) || (addr >= 0x80000000))) {
         return FAILED;
     }
 
     if (p->mmap_count >= MAX_WMMAP_INFO) {
-        cprintf("Error: Maximum number of memory mappings reached (%d)\n", MAX_WMMAP_INFO);
         return FAILED;
     }
 
@@ -592,10 +592,9 @@ int wunmap(uint addr) {
     }
 
     if (!found) {
-        cprintf("wunmap: address not found in mmap regions\n");
         return FAILED;
     }
-    return 0;
+    return SUCCESS;
 }
 
 
