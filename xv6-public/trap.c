@@ -4,11 +4,17 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "wmap.h"
 #include "x86.h"
+#include "fs.h"
 #include "traps.h"
 #include "spinlock.h"
+#include "sleeplock.h"
+#include "file.h"
+
 
 // Interrupt descriptor table (shared by all CPUs).
+//
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
 struct spinlock tickslock;
@@ -83,14 +89,40 @@ trap(struct trapframe *tf)
       int mapped = 0;
 
       for (int i = 0; i < p->mmap_count; i++) {
-        if (fault_addr >= p->mmap_regions[i].addr && fault_addr < (p->mmap_regions[i].addr + p->mmap_regions[i].length)) {
-            cprintf("%p", fault_addr);
+        struct mmap_region *region = &p->mmap_regions[i];
+        if (fault_addr >= region->addr && fault_addr < (region->addr + region->length)) {
             char *mem = kalloc();
             if (mem == 0) {
                 cprintf("Out of memory!\n");
                 kill(p->pid);
                 break;
             }
+            
+            memset(mem, 0, PGSIZE);
+
+            if (!(region->flags & MAP_ANONYMOUS) && region->fd != 0) {
+              struct file *f = p->ofile[region->fd];
+              if (f == 0 || f->type != FD_INODE) {
+                cprintf("Invalid file descriptor for memory mapping\n");
+                kfree(mem);
+                kill(p->pid);
+                break;
+              }
+
+              int offset = fault_addr - region->addr;
+              ilock(f->ip);
+              int bytes_read = readi(f->ip, mem, offset, PGSIZE);
+              iunlock(f->ip);
+
+              if (bytes_read < 0) {
+                 cprintf("File read failed at address: %p\n", fault_addr);
+                 kfree(mem);
+                 kill(p->pid);
+                 break;
+              }
+
+            }
+            
 
             int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
             

@@ -564,6 +564,14 @@ uint wmap(uint addr, int length, int flags, int fd) {
         return FAILED;
     }
 
+    for (int i = 0; i < p->mmap_count; i++) {
+        uint existing_start = p->mmap_regions[i].addr;
+        uint existing_end = existing_start + p->mmap_regions[i].length;
+        if ((addr < existing_end) && ((addr + length) > existing_start)) {
+            return FAILED;
+        }
+    }
+
     p->mmap_regions[p->mmap_count].addr = addr;
     p->mmap_regions[p->mmap_count].length = length;
     p->mmap_regions[p->mmap_count].flags = flags;
