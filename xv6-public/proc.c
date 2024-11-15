@@ -6,6 +6,7 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
+#include "wmap.h"
 
 struct {
   struct spinlock lock;
@@ -111,6 +112,7 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+  p->mmap_count = 0;
 
   return p;
 }
@@ -532,3 +534,51 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+
+
+
+uint wmap(uint addr, int length, int flags, int fd) {
+    struct proc *p = myproc();
+    uint start_addr = addr;
+
+    if (length <= 0 || (flags & MAP_FIXED && addr % PGSIZE != 0)) {
+        return FAILED;
+    }
+
+    if (p->mmap_count >= MAX_WMMAP_INFO) {
+        cprintf("Error: Maximum number of memory mappings reached (%d)\n", MAX_WMMAP_INFO);
+        return FAILED;
+    }
+
+    p->mmap_regions[p->mmap_count].addr = addr;
+    p->mmap_regions[p->mmap_count].length = length;
+    p->mmap_regions[p->mmap_count].flags = flags;
+    p->mmap_regions[p->mmap_count].fd = fd;
+
+    p->mmap_count++;
+
+    return start_addr;
+}
+
+uint getwmapinfo() {
+    struct proc *p = myproc();
+    struct wmapinfo *info;
+
+    if (argptr(0, (char**)&info, sizeof(struct wmapinfo)) < 0)
+        return FAILED;
+
+    info->total_mmaps = 0;
+
+    struct mmap_region *region = p->mmap_regions;
+    while (region != 0 && info->total_mmaps < MAX_WMMAP_INFO) {
+        info->addr[info->total_mmaps] = region->addr;
+        info->length[info->total_mmaps] = region->length;
+        info->n_loaded_pages[info->total_mmaps] = 0;
+        info->total_mmaps++;
+    }
+
+    return SUCCESS;
+}
+
+

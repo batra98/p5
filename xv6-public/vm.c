@@ -54,6 +54,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   return &pgtab[PTX(va)];
 }
 
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
@@ -78,6 +79,16 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   }
   return 0;
 }
+
+int perform_mapping(pde_t *pgdir, void *va, uint size, uint pa, int perm)
+{
+  return mappages(pgdir, va, size, pa, perm);
+}
+
+pte_t *get_pte(pde_t *pgdir, void *va) {
+  return walkpgdir(pgdir, va, 0);
+}
+
 
 // There is one page table per process, plus one that's used when
 // a CPU is not running any process (kpgdir). The kernel uses the

@@ -34,6 +34,14 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct mmap_region {
+  uint addr;
+  int length;
+  int flags;
+  int fd;
+};
+
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -49,7 +57,12 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  struct mmap_region mmap_regions[16];
+  int mmap_count;
 };
+
+uint wmap(uint addr, int length, int flags, int fd); 
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

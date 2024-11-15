@@ -77,6 +77,45 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  case T_PGFLT: {
+      uint fault_addr = rcr2();
+      struct proc *p = myproc();
+      int mapped = 0;
+
+      struct mmap_region *region = p->mmap_regions;
+      if (region == 0) {
+        cprintf("what is happening!\n");
+      
+      }
+      else {
+        cprintf("%p %p\n", region->addr, region->addr + region->length);
+        cprintf("%p\n", fault_addr);
+      }
+      for (int i = 0; i < p->mmap_count; i++) {
+        if (fault_addr >= p->mmap_regions[i].addr && fault_addr < (p->mmap_regions[i].addr + p->mmap_regions[i].length)) {
+            cprintf("%p", fault_addr);
+            char *mem = kalloc();
+            if (mem == 0) {
+                cprintf("Out of memory!\n");
+                kill(p->pid);
+                break;
+            }
+
+            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+            
+            if (result != 0) {
+              cprintf("Mapping failed for address: %p\n", fault_addr);
+            }
+            mapped = 1;
+            break;
+          }
+      }
+      if (!mapped) {
+        cprintf("Segmentation Fault\n");
+        kill(p->pid);
+      }
+      break;
+  }
 
   //PAGEBREAK: 13
   default:
