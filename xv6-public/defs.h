@@ -10,6 +10,8 @@ struct sleeplock;
 struct stat;
 struct superblock;
 
+typedef uint pte_t;
+
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -186,6 +188,7 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 int perform_mapping(pde_t *pgdir, void *va, uint size, uint pa, int perm);
+pte_t* get_pte(pde_t *pgdir, void *va);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

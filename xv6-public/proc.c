@@ -561,6 +561,46 @@ uint wmap(uint addr, int length, int flags, int fd) {
     return start_addr;
 }
 
+
+
+uint wunmap(uint addr) {
+    struct proc *p = myproc();
+    int found = 0;
+
+    for (int i = 0; i < p->mmap_count; i++) {
+        if (p->mmap_regions[i].addr == addr) {
+            found = 1;
+            uint start_addr = p->mmap_regions[i].addr;
+            uint end_addr = start_addr + p->mmap_regions[i].length;
+
+            for (uint a = start_addr; a < end_addr; a += PGSIZE) {
+                pte_t *pte = get_pte(p->pgdir, (void*)a);
+                if (pte && (*pte & PTE_P)) {
+                    uint physical_address = PTE_ADDR(*pte);
+                    kfree(P2V(physical_address));
+                    *pte = 0;
+                }
+            }
+            lcr3(V2P(p->pgdir));
+
+            for (int j = i; j < p->mmap_count - 1; j++) {
+                p->mmap_regions[j] = p->mmap_regions[j + 1];
+            }
+            p->mmap_count--;
+            break;
+        }
+    }
+
+    if (!found) {
+        cprintf("wunmap: address not found in mmap regions\n");
+        return FAILED;
+    }
+    return 0;
+}
+
+
+
+
 uint getwmapinfo() {
     struct proc *p = myproc();
     struct wmapinfo *info;

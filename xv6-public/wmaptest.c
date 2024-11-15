@@ -1,4 +1,3 @@
-
 #include "types.h"
 #include "user.h"
 #include "fcntl.h"
@@ -22,6 +21,12 @@ int main() {
     } else {
         printf(1, "Memory access failed after lazy allocation.\n");
     }
+    
+    if (wunmap(addr) == (uint) -1) {
+        printf(1, "Memory unmapping failed\n");
+        exit();
+    }
+    printf(1, "Memory unmapped successfully\n");
 
     exit();
 }

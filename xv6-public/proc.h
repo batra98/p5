@@ -62,7 +62,7 @@ struct proc {
 };
 
 uint wmap(uint addr, int length, int flags, int fd); 
-
+uint wunmap(uint addr); 
 
 // Process memory is laid out contiguously, low addresses first:
 //   text
