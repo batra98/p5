@@ -543,7 +543,20 @@ uint wmap(uint addr, int length, int flags, int fd) {
     struct proc *p = myproc();
     uint start_addr = addr;
 
-    if (length <= 0 || (flags & MAP_FIXED && addr % PGSIZE != 0) || ((addr < 0x60000000) || (addr >= 0x80000000))) {
+    
+    if (length <= 0) {
+        return FAILED;
+    }
+
+    if (!(flags & MAP_FIXED)) {
+        return FAILED;
+    }
+
+    if ((addr % PGSIZE != 0) || (addr < 0x60000000) || (addr >= 0x80000000)) {
+        return FAILED;
+    }
+
+    if (!(flags & MAP_SHARED)) {
         return FAILED;
     }
 
