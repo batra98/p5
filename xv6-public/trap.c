@@ -82,15 +82,6 @@ trap(struct trapframe *tf)
       struct proc *p = myproc();
       int mapped = 0;
 
-      struct mmap_region *region = p->mmap_regions;
-      if (region == 0) {
-        cprintf("what is happening!\n");
-      
-      }
-      else {
-        cprintf("%p %p\n", region->addr, region->addr + region->length);
-        cprintf("%p\n", fault_addr);
-      }
       for (int i = 0; i < p->mmap_count; i++) {
         if (fault_addr >= p->mmap_regions[i].addr && fault_addr < (p->mmap_regions[i].addr + p->mmap_regions[i].length)) {
             cprintf("%p", fault_addr);

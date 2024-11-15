@@ -563,7 +563,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
 
 
 
-uint wunmap(uint addr) {
+int wunmap(uint addr) {
     struct proc *p = myproc();
     int found = 0;
 
@@ -601,7 +601,7 @@ uint wunmap(uint addr) {
 
 
 
-uint getwmapinfo(struct wmapinfo *wminfo) {
+int getwmapinfo(struct wmapinfo *wminfo) {
     
     struct proc *curproc = myproc();
     int i;
@@ -632,7 +632,6 @@ uint va2pa(uint va)
 {
   struct proc *currproc = myproc();
 
-  cprintf("%d\n", va);
 
   pde_t *pgdir = currproc->pgdir;
 

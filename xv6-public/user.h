@@ -24,8 +24,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-int wmap(uint addr, int length, int flags, int fd);
-uint wunmap(uint addr);
+uint wmap(uint addr, int length, int flags, int fd);
+int wunmap(uint addr);
 int getwmapinfo(struct wmapinfo *wminfo);
 uint va2pa(uint va);
 

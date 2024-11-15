@@ -103,7 +103,7 @@ sys_wmap(void) {
   return wmap(addr,length, flags, fd);
 }
 
-uint
+int
 sys_wunmap(void)
 {
     uint addr;
