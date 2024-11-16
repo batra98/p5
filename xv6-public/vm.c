@@ -350,7 +350,7 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0) // mem is the child's new memory page
+    if((mem = kalloc()) == 0) // mem is the child's new memory page (mem points to the virtual addres of the new page)
       goto bad;
     memmove(mem, (char*)P2V(pa), PGSIZE); // copy parent's virtual memory page to child's virtual memory page
     if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) { // Create page table entries for the newly allocated page.
