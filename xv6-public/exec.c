@@ -29,13 +29,13 @@ exec(char *path, char **argv)
   ilock(ip);
   pgdir = 0;
 
-  // Check ELF header
+  // Check ELF header and read from disk to memory
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
   if(elf.magic != ELF_MAGIC)
     goto bad;
 
-  if((pgdir = setupkvm()) == 0)
+  if((pgdir = setupkvm()) == 0) // Setup the kernel part of the page table.
     goto bad;
 
   // Load program into memory.
@@ -49,7 +49,7 @@ exec(char *path, char **argv)
       goto bad;
     if(ph.vaddr + ph.memsz < ph.vaddr)
       goto bad;
-    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0)
+    if((sz = allocuvm(pgdir, sz, ph.vaddr + ph.memsz)) == 0) // Allocate new pages for the program sections of the executable and add page table entries for those.
       goto bad;
     if(ph.vaddr % PGSIZE != 0)
       goto bad;
@@ -94,13 +94,13 @@ exec(char *path, char **argv)
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
   // Commit to the user image.
-  oldpgdir = curproc->pgdir;
-  curproc->pgdir = pgdir;
+  oldpgdir = curproc->pgdir; // old page directory of child (copy of parent's page directory)
+  curproc->pgdir = pgdir; // new page directory containing the new binary image.
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
-  switchuvm(curproc);
-  freevm(oldpgdir);
+  switchuvm(curproc); // update cr3 register to point to new page directory
+  freevm(oldpgdir); // free the old unused page directory of child.
   return 0;
 
  bad:

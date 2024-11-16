@@ -58,6 +58,10 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
+//todo: What does page aligned mean here?
+/*
+Divide the virtual address space starting in the range [va, va + size -1] in the pages of 4KB size and create a pte for each of the virtual pages.
+*/
 static int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
@@ -114,7 +118,7 @@ pte_t *get_pte(pde_t *pgdir, void *va) {
 // This table defines the kernel's mappings, which are present in
 // every process's page table.
 static struct kmap {
-  void *virt;
+  void *virt; // start of virtual address
   uint phys_start;
   uint phys_end;
   int perm;
@@ -184,7 +188,7 @@ switchuvm(struct proc *p)
   // forbids I/O instructions (e.g., inb and outb) from user space
   mycpu()->ts.iomb = (ushort) 0xFFFF;
   ltr(SEG_TSS << 3);
-  lcr3(V2P(p->pgdir));  // switch to process's address space
+  lcr3(V2P(p->pgdir));  // switch to process's address space : Important!!! (This is where we update the CR3 register to point to the user's page directory)
   popcli();
 }
 
@@ -248,14 +252,14 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    mem = kalloc();
+    mem = kalloc(); // Allocate new page
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
+    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // Add the Page table mapping of virtual -> physical address. for the new page.
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
@@ -337,19 +341,19 @@ copyuvm(pde_t *pgdir, uint sz)
   uint pa, i, flags;
   char *mem;
 
-  if((d = setupkvm()) == 0)
+  if((d = setupkvm()) == 0) // Setup a new page table for the child and copy the kernel part.
     return 0;
-  for(i = 0; i < sz; i += PGSIZE){
+  for(i = 0; i < sz; i += PGSIZE){ // From VA 0 to virtual memory size of process (sz), find physical address of each page  and copy it using memmove
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+    if((mem = kalloc()) == 0) // mem is the child's new memory page
       goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
+    memmove(mem, (char*)P2V(pa), PGSIZE); // copy parent's virtual memory page to child's virtual memory page
+    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) { // Create page table entries for the newly allocated page.
       kfree(mem);
       goto bad;
     }

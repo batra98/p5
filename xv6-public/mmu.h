@@ -71,6 +71,7 @@ struct segdesc {
 //  \--- PDX(va) --/ \--- PTX(va) --/
 
 // page directory index
+// Index into the page directory i.e find the page directory by shifting by 22 bit and get the 10 bits.
 #define PDX(va)         (((uint)(va) >> PDXSHIFT) & 0x3FF)
 
 // page table index
