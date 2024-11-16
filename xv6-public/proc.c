@@ -607,6 +607,8 @@ int wunmap(uint addr) {
                 for (uint offset = 0; offset < region->length; offset += PGSIZE) {
                     char *page = uva2ka(p->pgdir, (char *)(addr + offset));
                     if (page) {
+
+                        begin_op();
                         ilock(region->file->ip);
                         int bytes_written = writei(region->file->ip, page, offset, PGSIZE);
                         iunlock(region->file->ip);
@@ -614,10 +616,12 @@ int wunmap(uint addr) {
                             cprintf("Failed to write page back to file\n");
                             return FAILED;
                         }
+                        end_op();
                     }
                 }
             }
             found = 1;
+
             uint start_addr = region->addr;
             uint end_addr = start_addr + region->length;
 
@@ -629,12 +633,16 @@ int wunmap(uint addr) {
                     *pte = 0;
                 }
             }
+
             lcr3(V2P(p->pgdir));
 
             for (int j = i; j < p->mmap_count - 1; j++) {
                 p->mmap_regions[j] = p->mmap_regions[j + 1];
             }
             p->mmap_count--;
+            if (region->file) {
+                fileclose(region->file);
+            }
             break;
         }
     }
@@ -642,10 +650,9 @@ int wunmap(uint addr) {
     if (!found) {
         return FAILED;
     }
+
     return SUCCESS;
 }
-
-
 
 
 int getwmapinfo(struct wmapinfo *wminfo) {
