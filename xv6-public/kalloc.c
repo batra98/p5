@@ -12,7 +12,7 @@
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
-
+// Pointer to a free page. (Page is a just of chunk of storage in bits ex: 4KB chunk of 1's and 0's)
 struct run {
   struct run *next;
 };
@@ -70,7 +70,7 @@ kfree(char *v)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = (struct run*)v;
-  r->next = kmem.freelist;
+  r->next = kmem.freelist; // Insert at the top of linked list containing free pages.
   kmem.freelist = r;
   if(kmem.use_lock)
     release(&kmem.lock);
@@ -88,7 +88,7 @@ kalloc(void)
     acquire(&kmem.lock);
   r = kmem.freelist;
   if(r)
-    kmem.freelist = r->next;
+    kmem.freelist = r->next; // Assign a free page from the top of linked list containing free pages.  (Pop operation)
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
