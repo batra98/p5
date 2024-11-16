@@ -101,8 +101,8 @@ trap(struct trapframe *tf)
             memset(mem, 0, PGSIZE);
 
             if (!(region->flags & MAP_ANONYMOUS) && region->fd != 0) {
-              struct file *f = p->ofile[region->fd];
-              if (f == 0 || f->type != FD_INODE) {
+              
+              if (region->file == 0 || region->file->type != FD_INODE) {
                 cprintf("Invalid file descriptor for memory mapping\n");
                 kfree(mem);
                 kill(p->pid);
@@ -110,9 +110,9 @@ trap(struct trapframe *tf)
               }
 
               int offset = fault_addr - region->addr;
-              ilock(f->ip);
-              int bytes_read = readi(f->ip, mem, offset, PGSIZE);
-              iunlock(f->ip);
+              ilock(region->file->ip);
+              int bytes_read = readi(region->file->ip, mem, offset, PGSIZE);
+              iunlock(region->file->ip);
 
               if (bytes_read < 0) {
                  cprintf("File read failed at address: %p\n", fault_addr);

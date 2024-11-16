@@ -41,6 +41,7 @@ struct mmap_region {
   int length;
   int flags;
   int fd;
+  struct file *file;
 };
 
 

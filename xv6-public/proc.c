@@ -7,6 +7,9 @@
 #include "proc.h"
 #include "spinlock.h"
 #include "wmap.h"
+#include "fs.h"
+#include "sleeplock.h"
+#include "file.h"
 
 struct {
   struct spinlock lock;
@@ -564,6 +567,14 @@ uint wmap(uint addr, int length, int flags, int fd) {
         return FAILED;
     }
 
+    struct file *f = 0;
+    if (!(flags & MAP_ANONYMOUS)) {
+        if (fd < 0 || fd >= NOFILE || (f = p->ofile[fd]) == 0 || f->type != FD_INODE) {
+            return FAILED;
+        }
+        filedup(f);
+    }
+
     for (int i = 0; i < p->mmap_count; i++) {
         uint existing_start = p->mmap_regions[i].addr;
         uint existing_end = existing_start + p->mmap_regions[i].length;
@@ -576,6 +587,7 @@ uint wmap(uint addr, int length, int flags, int fd) {
     p->mmap_regions[p->mmap_count].length = length;
     p->mmap_regions[p->mmap_count].flags = flags;
     p->mmap_regions[p->mmap_count].fd = fd;
+    p->mmap_regions[p->mmap_count].file = f;
 
     p->mmap_count++;
 
@@ -589,10 +601,25 @@ int wunmap(uint addr) {
     int found = 0;
 
     for (int i = 0; i < p->mmap_count; i++) {
-        if (p->mmap_regions[i].addr == addr) {
+        struct mmap_region *region = &p->mmap_regions[i];
+        if (region->addr == addr) {
+            if (region->file && (region->flags & MAP_SHARED)) {
+                for (uint offset = 0; offset < region->length; offset += PGSIZE) {
+                    char *page = uva2ka(p->pgdir, (char *)(addr + offset));
+                    if (page) {
+                        ilock(region->file->ip);
+                        int bytes_written = writei(region->file->ip, page, offset, PGSIZE);
+                        iunlock(region->file->ip);
+                        if (bytes_written < 0) {
+                            cprintf("Failed to write page back to file\n");
+                            return FAILED;
+                        }
+                    }
+                }
+            }
             found = 1;
-            uint start_addr = p->mmap_regions[i].addr;
-            uint end_addr = start_addr + p->mmap_regions[i].length;
+            uint start_addr = region->addr;
+            uint end_addr = start_addr + region->length;
 
             for (uint a = start_addr; a < end_addr; a += PGSIZE) {
                 pte_t *pte = get_pte(p->pgdir, (void*)a);
