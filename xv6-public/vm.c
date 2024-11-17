@@ -143,7 +143,7 @@ setupkvm(void)
     panic("PHYSTOP too high");
   for(k = kmap; k < &kmap[NELEM(kmap)]; k++)
     if(mappages(pgdir, k->virt, k->phys_end - k->phys_start,
-                (uint)k->phys_start, k->perm) < 0) {
+                (uint)k->phys_start, k->perm) < 0) { // todo: do we need to enable copy on write for kernel part as well?
       freevm(pgdir);
       return 0;
     }
@@ -259,7 +259,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // Add the Page table mapping of virtual -> physical address. for the new page.
+    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // Add the page table mapping of virtual -> (physical address) for the new page.
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
@@ -348,21 +348,21 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
+    
+    // if the page is write-able, set copy on write and mark it read-only
+    if(*pte & PTE_W){
+      *pte &= ~PTE_W; // Make the page read only in parent PTE.
+      *pte |= PTE_COW; // Set the COW bit
+    }
+
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0) // mem is the child's new memory page (mem points to the virtual addres of the new page)
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE); // copy parent's virtual memory page to child's virtual memory page
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) { // Create page table entries for the newly allocated page.
-      kfree(mem);
-      goto bad;
+    
+    if(mappages(d, (void*)i, PGSIZE, V2P(pa), flags) < 0) { // Create 1 page table entry for the child page pointing to the existing physical memory page.
+      return 0;
     }
   }
   return d;
-
-bad:
-  freevm(d);
-  return 0;
 }
 
 //PAGEBREAK!
