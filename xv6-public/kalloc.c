@@ -15,6 +15,7 @@ extern char end[]; // first address after kernel loaded from ELF file
 // Pointer to a free page. (Page is a just of chunk of storage in bits ex: 4KB chunk of 1's and 0's)
 struct run {
   struct run *next;
+  unsigned char refCount;
 };
 
 struct {
@@ -64,12 +65,26 @@ kfree(char *v)
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
 
+  r = (struct run*)v;
+
+  if(kmem.use_lock){ // For the kvinit1 and kvinit2, don't validate reference count.
+    r->refCount--;
+    if(r->refCount > 0){
+      return;
+    }
+
+    if(r->refCount <0){
+      panic("kfree: Trying to free an already freed page");
+    }
+  }
+  r->refCount = 0; // In the initial lock-less allocation of free pages in kvinit1 & kvinit2, mark the free page's refCount as 0
+  // Now we can release the memory and add it to the free list.
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
-  r = (struct run*)v;
+  
   r->next = kmem.freelist; // Insert at the top of linked list containing free pages.
   kmem.freelist = r;
   if(kmem.use_lock)
@@ -91,6 +106,9 @@ kalloc(void)
     kmem.freelist = r->next; // Assign a free page from the top of linked list containing free pages.  (Pop operation)
   if(kmem.use_lock)
     release(&kmem.lock);
+  r->refCount = 1;
   return (char*)r;
 }
 
+// todo: when the page is again referenced, we need to update refCount 
+//         -> how to do this? (When doing copy on write, just update the reference Count! Voila!)
