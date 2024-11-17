@@ -348,6 +348,8 @@ copyuvm(pde_t *pgdir, uint sz)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
+
+    pte_t *old_pte =  *pte;
     
     // if the page is write-able, set copy on write and mark it read-only
     if(*pte & PTE_W){
@@ -359,9 +361,12 @@ copyuvm(pde_t *pgdir, uint sz)
     flags = PTE_FLAGS(*pte);
     
     if(mappages(d, (void*)i, PGSIZE, V2P(pa), flags) < 0) { // Create 1 page table entry for the child page pointing to the existing physical memory page.
+      *pte = *old_pte;
+      lcr3(V2P(pgdir)); // Revalidate TLB cache of parent's page tables.
       return 0;
     }
   }
+  lcr3(V2P(pgdir));
   return d;
 }
 
