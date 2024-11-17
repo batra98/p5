@@ -4,7 +4,6 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
-#include "wmap.h"
 #include "x86.h"
 #include "fs.h"
 #include "traps.h"
