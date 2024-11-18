@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "kalloc.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -339,7 +340,6 @@ copyuvm(pde_t *pgdir, uint sz)
   pde_t *d;
   pte_t *pte;
   uint pa, i, flags;
-  char *mem;
 
   if((d = setupkvm()) == 0) // Setup a new page table for the child and copy the kernel part.
     return 0;
@@ -349,7 +349,7 @@ copyuvm(pde_t *pgdir, uint sz)
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
 
-    pte_t *old_pte =  *pte;
+    pte_t* old_pte = pte;
     
     // if the page is write-able, set copy on write and mark it read-only
     if(*pte & PTE_W){
@@ -359,7 +359,9 @@ copyuvm(pde_t *pgdir, uint sz)
 
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    
+    struct run* page = (struct run*)(char*)pa;
+    page->refCount++;
+ 
     if(mappages(d, (void*)i, PGSIZE, V2P(pa), flags) < 0) { // Create 1 page table entry for the child page pointing to the existing physical memory page.
       *pte = *old_pte;
       lcr3(V2P(pgdir)); // Revalidate TLB cache of parent's page tables.

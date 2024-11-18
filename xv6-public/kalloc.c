@@ -8,15 +8,11 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "spinlock.h"
+#include "kalloc.h"
 
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
-// Pointer to a free page. (Page is a just of chunk of storage in bits ex: 4KB chunk of 1's and 0's)
-struct run {
-  struct run *next;
-  unsigned char refCount;
-};
 
 struct {
   struct spinlock lock;
