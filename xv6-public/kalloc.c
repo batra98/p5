@@ -25,7 +25,7 @@ struct run {
   struct run *next;
 };
 
-const int MAX_PHYSICAL_PAGES = 1<<20; //(1Mi pages)
+#define MAX_PHYSICAL_PAGES 1<<20 //(1Mi pages)
 
 // Define an array of 1Mi pages for the Physical Frame Numbers. (physical pages)
 unsigned char refCounts[MAX_PHYSICAL_PAGES] = {0};
@@ -38,15 +38,15 @@ uint get_physical_page(void * va){
 }
 
 // The caller needs to hold the lock for kmem before trying to increase refCount.
-void increase_ref_count(void* va, int is_acquire_lock){
+void increase_ref_count(void* va){
   uint physical_page = get_physical_page(va);
-  if(is_acquire_lock)
-    acquire(&kmem.lock);
-
   refCounts[physical_page]++;
+}
 
-  if(is_acquire_lock)
-    release(&kmem.lock);
+void increase_ref_count_physical_page(uint pa){
+  acquire(&kmem.lock);
+  refCounts[pa]++;
+  release(&kmem.lock);
 }
 
 void decrease_ref_count(void *va){
@@ -151,7 +151,7 @@ kalloc(void)
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next; // Assign a free page from the top of linked list containing free pages.  (Pop operation)
-    increase_ref_count(r, 0);
+    increase_ref_count(r);
   }
   if(kmem.use_lock)
     release(&kmem.lock);

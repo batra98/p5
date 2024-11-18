@@ -360,11 +360,9 @@ copyuvm(pde_t *pgdir, uint sz)
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
 
-    // todo: Increase reference count of the physical page
+    // Increase reference count of the physical page
+    increase_ref_count_physical_page(pa);
 
-    // struct run* page = (struct run*)(char*)pa;
-    // page->refCount++;
-    // to:ask:doubt: for the third param, do I need to do V2P(pa)? When do we walk Page tables vs V2P or P2V ?
     if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0) { // Create 1 page table entry for the child page pointing to the existing physical memory page.
       *pte = *old_pte;
       lcr3(V2P(pgdir)); // Revalidate TLB cache of parent's page tables.

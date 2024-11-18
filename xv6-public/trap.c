@@ -165,21 +165,24 @@ trap(struct trapframe *tf)
         char* mem = kalloc();
         if(mem == 0){
           // New physical memory page allocation failed
+          kfree(mem);
           kill(p->pid);
         }
         uint pa = PTE_ADDR(*pte);
         uint flags = PTE_FLAGS(*pte);
         flags &= ~PTE_COW; // Unset COW
         flags |= PTE_W; // Set write bit
-        char* page = (char*)PGROUNDDOWN(fault_addr);
 
         memmove(mem, (char*)P2V(pa), PGSIZE);
+        char* page = (char*)PGROUNDDOWN(fault_addr);
         // Map the pages
-        if(perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), flags) < 0){
+        if(perform_mapping(p->pgdir, (void*)page, PGSIZE, V2P(mem), flags) < 0){
+          // todo: Do we need to reset the flags?
+          cprintf("todo: reset flags");
           kfree(mem);
           kill(p->pid);
         }
-        kfree(page);
+        kfree(P2V(pa));
         lcr3(V2P(p->pgdir)); // reload the page table of current process.
 
         // todo:optimization: if the existing reference Count is 1, then don't have to allocate new memory page,
