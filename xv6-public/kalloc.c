@@ -9,6 +9,10 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+uint ref_count[1024*1024];
+
+
+
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
@@ -22,6 +26,28 @@ struct {
   int use_lock;
   struct run *freelist;
 } kmem;
+
+void inc_ref_count(uint pa){
+  uint pfn = pa >> 12;
+
+  acquire(&kmem.lock);
+  ref_count[pfn]++;
+  release(&kmem.lock);
+}
+
+void decrement_ref_count(uint pa){
+  uint pfn = pa >> 12;
+
+  acquire(&kmem.lock);
+  ref_count[pfn]--;
+  release(&kmem.lock);
+}
+
+int get_ref_count(uint pa) {
+  uint pfn = pa >> 12;
+  return ref_count[pfn];
+}
+
 
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
@@ -60,6 +86,13 @@ void
 kfree(char *v)
 {
   struct run *r;
+  /*int pfn = (uint)v >> 12;
+
+  if(ref_count[pfn] > 1)
+  {
+    ref_count[pfn]--;
+    return;
+  }*/
 
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
@@ -91,6 +124,12 @@ kalloc(void)
     kmem.freelist = r->next;
   if(kmem.use_lock)
     release(&kmem.lock);
+
+  /*if(r) {
+    int pfn = (uint)r >> 12;
+    ref_count[pfn] = 1;
+  }*/
+
   return (char*)r;
 }
 

@@ -180,6 +180,59 @@ growproc(int n)
   return 0;
 }
 
+int mmap_copy_page_tables(struct mmap_region *region, pde_t *parent_pgdir, struct mmap_region *child_region, pde_t *child_pgdir) {
+    pte_t *pte;
+    uint i;
+
+    for (i = region->addr; i < region->addr + region->length; i += PGSIZE) {
+        pte = get_pte(parent_pgdir, (void *)i);
+        if (pte == 0 || !(*pte & PTE_P))
+            continue;
+
+        if (perform_mapping(child_pgdir, (void *)i, PGSIZE, PTE_ADDR(*pte), PTE_FLAGS(*pte) | PTE_COW) < 0) {
+            return -1;
+        }
+
+        inc_ref_count(PTE_ADDR(*pte));
+    }
+
+    return 0;
+}
+
+int copy_mmap_regions(struct proc *parent, struct proc *child) {
+    struct mmap_region *parent_region, *child_region;
+    int i;
+
+    for (i = 0; i < parent->mmap_count; i++) {
+        parent_region = &parent->mmap_regions[i];
+
+        if (child->mmap_count >= MAX_WMMAP_INFO) {
+            return FAILED;
+        }
+
+        child_region = &child->mmap_regions[child->mmap_count];
+
+        child_region->addr = parent_region->addr;
+        child_region->length = parent_region->length;
+        child_region->flags = parent_region->flags;
+        child_region->fd = parent_region->fd;
+        child_region->file = parent_region->file;
+
+        child->mmap_count++;
+
+        if (parent_region->flags & MAP_SHARED && parent_region->file != 0) {
+            filedup(parent_region->file);
+        }
+
+        /*if (mmap_copy_page_tables(parent_region, parent->pgdir, child_region, child->pgdir) < 0) {
+            return -1;
+        }*/
+    }
+
+    return 0;
+}
+
+
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
@@ -215,6 +268,13 @@ fork(void)
   np->cwd = idup(curproc->cwd);
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
+
+  if (copy_mmap_regions(curproc, np) < 0) {
+        kfree(np->kstack);
+        np->kstack = 0;
+        np->state = UNUSED;
+        return -1;
+  }
 
   pid = np->pid;
 
@@ -697,3 +757,6 @@ uint va2pa(uint va)
   uint pa = PTE_ADDR(*pte) | (va & 0xFFF); 
   return pa;
 }
+
+
+

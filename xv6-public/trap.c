@@ -91,7 +91,9 @@ trap(struct trapframe *tf)
       for (int i = 0; i < p->mmap_count; i++) {
         struct mmap_region *region = &p->mmap_regions[i];
         if (fault_addr >= region->addr && fault_addr < (region->addr + region->length)) {
+            mapped = 1;
             char *mem = kalloc();
+
             if (mem == 0) {
                 cprintf("Out of memory!\n");
                 kill(p->pid);
@@ -122,14 +124,53 @@ trap(struct trapframe *tf)
               }
 
             }
-            
+            pte_t *pte = get_pte(p->pgdir, (void*)fault_addr);
 
-            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
-            
-            if (result != 0) {
-              cprintf("Mapping failed for address: %p\n", fault_addr);
+            if (pte) {
+                
+                if(!(*pte & PTE_COW)){
+                  cprintf("Segmentation Fault\n");
+                  kill(p->pid);
+                  break;
+                } 
+
+                uint pa = PTE_ADDR(*pte);
+                int curr_ref_count = get_ref_count(pa); 
+                
+                if(curr_ref_count == 0) {
+                  cprintf("reference count = 0\n");
+                  pte = 0;
+                  break;
+                }
+
+                if(curr_ref_count == 1){
+                  cprintf("reference count = 1\n");
+                  *pte = pa | PTE_W | PTE_P | PTE_U; 
+                  break;
+                }
+                
+                char *new_page = kalloc();
+                if (new_page == 0) {
+                    cprintf("Out of memory!\n");
+                    kill(p->pid);
+                    break;
+                }
+
+                memmove(new_page, (char*)pa, PGSIZE);
+
+                lcr3(V2P(p->pgdir));
+
+                *pte = V2P(new_page) | PTE_W | PTE_P | PTE_U;
+
+                inc_ref_count(pa);
+                decrement_ref_count(pa);
+
+            } else {
+                int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+                if (result != 0) {
+                    cprintf("Mapping failed for address: %p\n", fault_addr);
+                }
             }
-            mapped = 1;
             break;
           }
       }
