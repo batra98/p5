@@ -20,6 +20,54 @@ struct {
   struct run *freelist;
 } kmem;
 
+// A free page. (Page is a just of chunk of storage in bits ex: 4KB chunk of 1's and 0's)
+struct run {
+  struct run *next;
+};
+
+const int MAX_PHYSICAL_PAGES = 1<<20; //(1Mi pages)
+
+// Define an array of 1Mi pages for the Physical Frame Numbers. (physical pages)
+unsigned char refCounts[MAX_PHYSICAL_PAGES] = {0};
+
+uint get_physical_page(void * va){
+  char* p = (char*)PGROUNDDOWN((uint)va); // represents the virtual page cointaining the virtual address
+  if((uint)p % PGSIZE || p < end || V2P(p) >= PHYSTOP)
+    panic("Virtual address out of range while incrementing refCount");
+  return V2P(p);
+}
+
+// The caller needs to hold the lock for kmem before trying to increase refCount.
+void increase_ref_count(void* va, int is_acquire_lock){
+  uint physical_page = get_physical_page(va);
+  if(is_acquire_lock)
+    acquire(&kmem.lock);
+
+  refCounts[physical_page]++;
+
+  if(is_acquire_lock)
+    release(&kmem.lock);
+}
+
+void decrease_ref_count(void *va){
+  uint physical_page = get_physical_page(va);
+  refCounts[physical_page]--;
+}
+
+// void get_reference_count(void* va){
+//   uint physical_page = get_physical_page(va);
+//   unsigned char refCount;
+  
+//   if(kmem.use_lock)
+//     acquire(&kmem.lock);
+  
+//   refCount = refCounts[physical_page];
+  
+//   if(kmem.use_lock)
+//     release(&kmem.lock);
+//   return refCount;
+// }
+
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
 // the pages mapped by entrypgdir on free list.
@@ -63,23 +111,26 @@ kfree(char *v)
 
   r = (struct run*)v;
 
-  if(kmem.use_lock){ // For the kvinit1 and kvinit2, don't validate reference count.
-    r->refCount--;
-    if(r->refCount > 0){
-      return;
-    }
-
-    if(r->refCount <0){
-      panic("kfree: Trying to free an already freed page");
-    }
-  }
-  r->refCount = 0; // In the initial lock-less allocation of free pages in kvinit1 & kvinit2, mark the free page's refCount as 0
   // Now we can release the memory and add it to the free list.
   // Fill with junk to catch dangling refs.
   memset(v, 1, PGSIZE);
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
+
+  uint physical_page_no = V2P(v);
+  refCounts[physical_page_no]--;
+
+  if(refCounts[physical_page_no] > 0){
+    if(kmem.use_lock)
+      release(&kmem.lock);
+    return;
+  }
+  if(refCounts[physical_page_no] < 0){
+    if(kmem.use_lock)
+      release(&kmem.lock);
+    panic("kfree: Trying to free an already freed page");
+  }
   
   r->next = kmem.freelist; // Insert at the top of linked list containing free pages.
   kmem.freelist = r;
@@ -98,11 +149,12 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next; // Assign a free page from the top of linked list containing free pages.  (Pop operation)
+    increase_ref_count(r, 0);
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
-  r->refCount = 1;
   return (char*)r;
 }
 
