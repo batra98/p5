@@ -14,3 +14,12 @@ xv6 Memory management:
 
 
 Note: 6 & 7 later.
+
+
+----------
+
+
+## COW
+
+
+How to identify different types of page fault in trap handler in xv6 for T_PGFLT?
