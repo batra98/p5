@@ -133,9 +133,7 @@ trap(struct trapframe *tf)
 
             }
             
-
-            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
-            
+            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);            
             if (result != 0) {
               cprintf("Mapping failed for address: %p\n", fault_addr);
             }
