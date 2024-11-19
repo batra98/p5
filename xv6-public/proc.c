@@ -189,7 +189,7 @@ int mmap_copy_page_tables(struct mmap_region *region, pde_t *parent_pgdir, struc
         if (pte == 0 || !(*pte & PTE_P))
             continue;
 
-        if (perform_mapping(child_pgdir, (void *)i, PGSIZE, PTE_ADDR(*pte), PTE_FLAGS(*pte) | PTE_COW) < 0) {
+        if (perform_mapping(child_pgdir, (void *)i, PGSIZE, PTE_ADDR(*pte), PTE_FLAGS(*pte)) < 0) {
             return -1;
         }
 

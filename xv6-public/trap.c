@@ -92,6 +92,7 @@ trap(struct trapframe *tf)
 
     pte_t *pte = get_pte(p->pgdir, (void *)fault_addr);
 
+    // Edge case to handle if user doesn't have access to the page.
     // if (pte && !(*pte & PTE_U)) {
     //   // User doesn't have access to the page
     //   cprintf("Segmentation Fault\n");
@@ -108,14 +109,14 @@ trap(struct trapframe *tf)
 
     if (pte != 0) {
       uint pa = PTE_ADDR(*pte);
-      // Edge case to handle if user doesn't have access to the page.
 
       // allowed to write
-      if (*pte & PTE_COW) {
+      if (!(*pte & PTE_W) && (*pte & PTE_COW)) {
         // PAGE can be written
         uint ref_cnt = get_ref_count(pa);
         if (ref_cnt == 1) {
           *pte |= PTE_W;
+          *pte &= ~PTE_COW;
         } else if (ref_cnt > 1) {
           char *mem;
           *pte = 0;
