@@ -595,9 +595,6 @@ procdump(void)
   }
 }
 
-
-
-
 uint wmap(uint addr, int length, int flags, int fd) {
     struct proc *p = myproc();
     uint start_addr = addr;

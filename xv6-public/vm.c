@@ -350,6 +350,7 @@ copyuvm(pde_t *pgdir, uint sz)
       *pte &= ~PTE_W;
       *pte |= PTE_COW;
     } 
+
     // cprintf("after pte write %d\n", *pte & PTE_W);
     // cprintf("after pte COW %d\n", *pte & PTE_COW);
     flags = PTE_FLAGS(*pte);
