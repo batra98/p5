@@ -4,7 +4,6 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
-#include "wmap.h"
 #include "x86.h"
 #include "fs.h"
 #include "traps.h"
@@ -84,13 +83,24 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT: {
-      uint fault_addr = rcr2();
+      uint fault_addr = rcr2(); //virtual address which is faulting.
       struct proc *p = myproc();
       int mapped = 0;
+      int is_handle_mmap_fault = 0;
+      cprintf("Page fault at %p\n", rcr2()); 
 
-      for (int i = 0; i < p->mmap_count; i++) {
-        struct mmap_region *region = &p->mmap_regions[i];
-        if (fault_addr >= region->addr && fault_addr < (region->addr + region->length)) {
+      // calculate pte from fault address.
+      pte_t* pte = get_pte(p->pgdir, (void*)fault_addr);
+      
+      if(!pte){
+        cprintf("No page table entry found, can't be because of COW\n");
+        is_handle_mmap_fault = 1;
+      }
+      
+      if(is_handle_mmap_fault){
+        for (int i = 0; i < p->mmap_count; i++) {
+          struct mmap_region *region = &p->mmap_regions[i];
+          if (fault_addr >= region->addr && fault_addr < (region->addr + region->length)) {
             char *mem = kalloc();
             if (mem == 0) {
                 cprintf("Out of memory!\n");
@@ -123,20 +133,62 @@ trap(struct trapframe *tf)
 
             }
             
-
-            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
-            
+            int result = perform_mapping(p->pgdir, (void*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);            
             if (result != 0) {
               cprintf("Mapping failed for address: %p\n", fault_addr);
             }
             mapped = 1;
             break;
           }
+        }
+        if (!mapped) {
+          cprintf("Segmentation Fault\n");
+          kill(p->pid);
+        }
+        break; // If it because of lazy allocation, return here and don't run COW handler code.
       }
-      if (!mapped) {
-        cprintf("Segmentation Fault\n");
+      // Handler for COW page fault
+      cprintf("Now Handle COW write fault checks ---------> \n");
+      if(!(*pte & PTE_P)){
+        cprintf("PTE Doesn't exist - Page fault \n");
         kill(p->pid);
       }
+      // Edge case to handle if user doesn't have access to the page.
+      if(!(*pte & PTE_U)){
+        cprintf("User doesn't have access to the page.");
+        kill(p->pid);
+      }
+      // if write is not set and copy on write is set
+      if(!(*pte & PTE_W) && (*pte & PTE_COW)){
+        cprintf("Inside COW \n");
+        // the page is write-able. Create a new page and decrease refCount of the page.
+        char* mem = kalloc();
+        if(mem == 0){
+          // New physical memory page allocation failed
+          kfree(mem);
+          kill(p->pid);
+        }
+        uint pa = PTE_ADDR(*pte);
+        uint flags = PTE_FLAGS(*pte);
+        flags &= ~PTE_COW; // Unset COW
+        flags |= PTE_W; // Set write bit
+
+        memmove(mem, (char*)P2V(pa), PGSIZE);
+        char* page = (char*)PGROUNDDOWN(fault_addr);
+        // Map the pages
+        if(perform_mapping(p->pgdir, (void*)page, PGSIZE, V2P(mem), flags) < 0){
+          // todo: Do we need to reset the flags?
+          cprintf("todo: reset flags");
+          kfree(mem);
+          kill(p->pid);
+        }
+        kfree(P2V(pa));
+        lcr3(V2P(p->pgdir)); // reload the page table of current process.
+
+        // todo:optimization: if the existing reference Count is 1, then don't have to allocate new memory page,
+        // just reset W=1 and COW=0 flag.
+      }
+
       break;
   }
 

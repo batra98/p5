@@ -1,3 +1,4 @@
+#include "kalloc.h"
 #include "types.h"
 #include "defs.h"
 #include "param.h"
@@ -6,7 +7,6 @@
 #include "x86.h"
 #include "proc.h"
 #include "spinlock.h"
-#include "wmap.h"
 #include "fs.h"
 #include "sleeplock.h"
 #include "file.h"
@@ -169,7 +169,7 @@ growproc(int n)
 
   sz = curproc->sz;
   if(n > 0){
-    if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
+    if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0) // Grow the user virtual memory by n bytes.
       return -1;
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
@@ -178,6 +178,31 @@ growproc(int n)
   curproc->sz = sz;
   switchuvm(curproc);
   return 0;
+}
+
+int copy_mmap_regions(struct proc *parent, struct proc *child) {
+    struct mmap_region *parent_region, *child_region;
+    int i;
+    for (i = 0; i < parent->mmap_count; i++) {
+        parent_region = &parent->mmap_regions[i];
+        if (child->mmap_count >= MAX_WMMAP_INFO) {
+            return FAILED;
+        }
+        child_region = &child->mmap_regions[child->mmap_count];
+        child_region->addr = parent_region->addr;
+        child_region->length = parent_region->length;
+        child_region->flags = parent_region->flags;
+        child_region->fd = parent_region->fd;
+        child_region->file = parent_region->file;
+        child->mmap_count++;
+        if (parent_region->flags & MAP_SHARED && parent_region->file != 0) {
+            filedup(parent_region->file);
+        }
+        /*if (mmap_copy_page_tables(parent_region, parent->pgdir, child_region, child->pgdir) < 0) {
+            return -1;
+        }*/
+    }
+    return 0;
 }
 
 // Create a new process copying p as the parent.
@@ -223,6 +248,14 @@ fork(void)
   np->state = RUNNABLE;
 
   release(&ptable.lock);
+
+  if (copy_mmap_regions(curproc, np) < 0) {
+    kfree(np->kstack);
+    np->kstack = 0;
+    np->state = UNUSED;
+    return -1;
+  }
+
 
   return pid;
 }

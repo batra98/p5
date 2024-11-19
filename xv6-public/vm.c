@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "kalloc.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -58,6 +59,10 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
+//todo: What does page aligned mean here?
+/*
+Divide the virtual address space starting in the range [va, va + size -1] in the pages of 4KB size and create a pte for each of the virtual pages.
+*/
 static int
 mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
 {
@@ -114,7 +119,7 @@ pte_t *get_pte(pde_t *pgdir, void *va) {
 // This table defines the kernel's mappings, which are present in
 // every process's page table.
 static struct kmap {
-  void *virt;
+  void *virt; // start of virtual address
   uint phys_start;
   uint phys_end;
   int perm;
@@ -139,7 +144,7 @@ setupkvm(void)
     panic("PHYSTOP too high");
   for(k = kmap; k < &kmap[NELEM(kmap)]; k++)
     if(mappages(pgdir, k->virt, k->phys_end - k->phys_start,
-                (uint)k->phys_start, k->perm) < 0) {
+                (uint)k->phys_start, k->perm) < 0) { // todo: do we need to enable copy on write for kernel part as well?
       freevm(pgdir);
       return 0;
     }
@@ -184,7 +189,7 @@ switchuvm(struct proc *p)
   // forbids I/O instructions (e.g., inb and outb) from user space
   mycpu()->ts.iomb = (ushort) 0xFFFF;
   ltr(SEG_TSS << 3);
-  lcr3(V2P(p->pgdir));  // switch to process's address space
+  lcr3(V2P(p->pgdir));  // switch to process's address space : Important!!! (This is where we update the CR3 register to point to the user's page directory)
   popcli();
 }
 
@@ -248,14 +253,14 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
-    mem = kalloc();
+    mem = kalloc(); // Allocate new page
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
       deallocuvm(pgdir, newsz, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){
+    if(mappages(pgdir, (char*)a, PGSIZE, V2P(mem), PTE_W|PTE_U) < 0){ // Add the page table mapping of virtual -> (physical address) for the new page.
       cprintf("allocuvm out of memory (2)\n");
       deallocuvm(pgdir, newsz, oldsz);
       kfree(mem);
@@ -335,30 +340,37 @@ copyuvm(pde_t *pgdir, uint sz)
   pde_t *d;
   pte_t *pte;
   uint pa, i, flags;
-  char *mem;
 
-  if((d = setupkvm()) == 0)
+  if((d = setupkvm()) == 0) // Setup a new page table for the child and copy the kernel part.
     return 0;
-  for(i = 0; i < sz; i += PGSIZE){
+  for(i = 0; i < sz; i += PGSIZE){ // From VA 0 to virtual memory size of process (sz), find physical address of each page  and copy it using memmove
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!(*pte & PTE_P))
       panic("copyuvm: page not present");
+
+    pte_t* old_pte = pte;
+    
+    // if the page is write-able, set copy on write and mark it read-only
+    if(*pte & PTE_W){
+      *pte &= ~PTE_W; // Make the page read only in parent PTE.
+      *pte |= PTE_COW; // Set the COW bit
+    }
+
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto bad;
-    memmove(mem, (char*)P2V(pa), PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, V2P(mem), flags) < 0) {
-      kfree(mem);
-      goto bad;
+
+    // Increase reference count of the physical page
+    increase_ref_count_physical_page(pa);
+
+    if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0) { // Create 1 page table entry for the child page pointing to the existing physical memory page.
+      *pte = *old_pte;
+      lcr3(V2P(pgdir)); // Revalidate TLB cache of parent's page tables.
+      return 0;
     }
   }
+  lcr3(V2P(pgdir));
   return d;
-
-bad:
-  freevm(d);
-  return 0;
 }
 
 //PAGEBREAK!
