@@ -85,10 +85,48 @@ trap(struct trapframe *tf)
     break;
   case T_PGFLT: {
       uint fault_addr = rcr2();
+      fault_addr = PGROUNDDOWN(fault_addr);
       struct proc *p = myproc();
       int mapped = 0;
 
-      for (int i = 0; i < p->mmap_count; i++) {
+      pte_t* pte = get_pte(p->pgdir, (void *)fault_addr);
+
+      if(pte!=0){
+        uint pa = PTE_ADDR(*pte);
+
+        if(get_ref_count(pa)==0){
+            pte = 0;
+        }
+      }
+    
+    if(pte != 0) { 
+        uint pa = PTE_ADDR(*pte);
+        //allowed to write
+        if(*pte & PTE_COW) {
+          // PAGE can be written
+          uint ref_cnt = get_ref_count(pa);
+          if(ref_cnt == 1) {
+            *pte|=PTE_W;
+
+          } else if(ref_cnt > 1) {
+              char *mem;
+              *pte = 0;
+
+            if((mem = kalloc()) == 0) {
+              cprintf("Could not allocate memory");
+            }
+          
+            memmove(mem, (char*)P2V(pa), PGSIZE);
+            perform_mapping(p->pgdir, (char*)fault_addr, PGSIZE, V2P(mem), PTE_W | PTE_U);
+            decrement_ref_count(pa);
+            lcr3(V2P(p->pgdir));
+          }
+        } else {
+          cprintf("Segmentation Fault\n");
+          exit();
+        }
+    } else {
+        for (int i = 0; i < p->mmap_count; i++) {
         struct mmap_region *region = &p->mmap_regions[i];
         if (fault_addr >= region->addr && fault_addr < (region->addr + region->length)) {
             char *mem = kalloc();
@@ -137,9 +175,10 @@ trap(struct trapframe *tf)
         cprintf("Segmentation Fault\n");
         kill(p->pid);
       }
-      break;
-  }
 
+    }
+    break;
+    }
   //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
