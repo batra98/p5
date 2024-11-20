@@ -122,7 +122,7 @@ trap(struct trapframe *tf)
           *pte = 0;
 
           if ((mem = kalloc()) == 0) {
-            cprintf("Could not allocate memory");
+            exit();
           }
 
           memmove(mem, (char *)P2V(pa), PGSIZE);
@@ -142,7 +142,6 @@ trap(struct trapframe *tf)
             fault_addr < (region->addr + region->length)) {
           char *mem = kalloc();
           if (mem == 0) {
-            cprintf("Out of memory!\n");
             kill(p->pid);
             break;
           }
@@ -151,7 +150,6 @@ trap(struct trapframe *tf)
 
           if (!(region->flags & MAP_ANONYMOUS) && region->fd != 0) {
             if (region->file == 0 || region->file->type != FD_INODE) {
-              cprintf("Invalid file descriptor for memory mapping\n");
               kfree(mem);
               kill(p->pid);
               break;
@@ -163,7 +161,6 @@ trap(struct trapframe *tf)
             iunlock(region->file->ip);
 
             if (bytes_read < 0) {
-              cprintf("File read failed at address: %p\n", fault_addr);
               kfree(mem);
               kill(p->pid);
               break;
@@ -174,7 +171,7 @@ trap(struct trapframe *tf)
                                        V2P(mem), PTE_W | PTE_U);
 
           if (result != 0) {
-            cprintf("Mapping failed for address: %p\n", fault_addr);
+            exit();
           }
           mapped = 1;
           break;

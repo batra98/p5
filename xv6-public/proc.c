@@ -666,7 +666,6 @@ int wunmap(uint addr) {
                         int bytes_written = writei(region->file->ip, page, offset, PGSIZE);
                         iunlock(region->file->ip);
                         if (bytes_written < 0) {
-                            cprintf("Failed to write page back to file\n");
                             return FAILED;
                         }
                         end_op();
