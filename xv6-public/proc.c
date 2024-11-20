@@ -294,15 +294,15 @@ exit(void)
   if(curproc == initproc)
     panic("init exiting");
   
-  for (int i = 0; i < p->mmap_count; i++) {
-    struct mmap_region *region = &p->mmap_regions[i];
+  for (int i = 0; i < curproc->mmap_count; i++) {
+    struct mmap_region *region = &curproc->mmap_regions[i];
     if (region->file && (region->flags & MAP_SHARED)) {
       for (uint offset = 0; offset < region->length; offset += PGSIZE) {
-        char *page = uva2ka(p->pgdir, (char *)(region->addr + offset));
+        char *page = uva2ka(curproc->pgdir, (char *)(region->addr + offset));
         if (page) {
           begin_op();
           ilock(region->file->ip);
-          int bytes_written = writei(region->file->ip, page, offset, PGSIZE);
+          writei(region->file->ip, page, offset, PGSIZE);
           iunlock(region->file->ip);
           end_op();
         }
@@ -313,7 +313,7 @@ exit(void)
     uint end_addr = start_addr + region->length;
 
     for (uint a = start_addr; a < end_addr; a += PGSIZE) {
-      pte_t *pte = get_pte(p->pgdir, (void*)a);
+      pte_t *pte = get_pte(curproc->pgdir, (void*)a);
       if (pte && (*pte & PTE_P)) {
         uint physical_address = PTE_ADDR(*pte);
         kfree(P2V(physical_address));
@@ -321,7 +321,7 @@ exit(void)
       }
     }
 
-    lcr3(V2P(p->pgdir));
+    lcr3(V2P(curproc->pgdir));
   }
 
 
