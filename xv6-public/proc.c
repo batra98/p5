@@ -271,15 +271,13 @@ fork(void)
 
   np->state = RUNNABLE;
 
-  release(&ptable.lock);
-
   if (copy_mmap_regions(curproc, np) < 0) {
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
     return -1;
   }
-
+  release(&ptable.lock);
   return pid;
 }
 
