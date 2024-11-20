@@ -9,6 +9,8 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+static unsigned char ref_count[MAX_PFN] = {0};
+
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
                    // defined by the kernel linker script in kernel.ld
@@ -22,6 +24,29 @@ struct {
   int use_lock;
   struct run *freelist;
 } kmem;
+
+
+
+void inc_ref_count(uint pa) {
+  uint pfn = PFN(pa);
+  acquire(&kmem.lock);
+  ref_count[pfn]++;
+  release(&kmem.lock);
+}
+
+void decrement_ref_count(uint pa) {
+  uint pfn = PFN(pa);
+  ref_count[pfn]--;
+}
+
+uint get_ref_count(uint pa) {
+  uint pfn = PFN(pa);
+  uint count;
+  acquire(&kmem.lock);
+  count = ref_count[pfn];
+  release(&kmem.lock);
+  return count;
+}
 
 // Initialization happens in two phases.
 // 1. main() calls kinit1() while still using entrypgdir to place just
@@ -64,11 +89,22 @@ kfree(char *v)
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(v, 1, PGSIZE);
+  uint pa = V2P(v);
+  uint pfn = PFN(pa);
 
   if(kmem.use_lock)
     acquire(&kmem.lock);
+
+  if (ref_count[pfn] > 1) {
+    ref_count[pfn]--;
+    if(kmem.use_lock)
+      release(&kmem.lock);
+    return;
+  }
+
+  // Fill with junk to catch dangling refs.
+  memset(v, 1, PGSIZE);
+
   r = (struct run*)v;
   r->next = kmem.freelist;
   kmem.freelist = r;
@@ -87,8 +123,13 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
+    char* va = (char *)r;
+    uint pa = V2P(va);
+    uint pfn = PFN(pa);
     kmem.freelist = r->next;
+    ref_count[pfn] = 1;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
